@@ -120,6 +120,7 @@ if st.button("🚀 Generate Multi-Scene Viral Video"):
     elif not video_tags:
         st.error("Please enter descriptive tags.")
     else:
+        # Split by punctuation but filter out empty parts
         sentences = [s.strip() for s in re.split(r'[.\n!?]+', script) if s.strip()]
         
         if not sentences:
@@ -157,13 +158,15 @@ if st.button("🚀 Generate Multi-Scene Viral Video"):
                         
                         scene_output = f"scene_{i}.mp4"
                         
-                        # Added precise 1080x1920 scaling, letterboxing, and standard frame/audio rate conversions
+                        # FIX: explicitly map the voiceover [1:a] as the exclusive single audio stream source 
+                        # instead of letting FFmpeg look for audio inside the silent raw video clip.
                         ffmpeg_scene = [
                             'ffmpeg', '-y',
                             '-stream_loop', '-1', '-i', raw_video_file,
                             '-i', tts_file,
                             '-filter_complex', '[0:v]scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=30[v]',
-                            '-map', '[v]', '-map', '1:a',
+                            '-map', '[v]', 
+                            '-map', '1:a',
                             '-c:v', 'libx264', '-pix_fmt', 'yuv420p',
                             '-c:a', 'aac', '-ar', '44100', '-shortest', scene_output
                         ]
@@ -195,7 +198,7 @@ if st.button("🚀 Generate Multi-Scene Viral Video"):
                     ]
                     subprocess.run(ffmpeg_mix, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
                     
-                    # Clean up
+                    # Clean up workspace
                     for sf in scene_files:
                         if os.path.exists(sf): os.remove(sf)
                     if os.path.exists("file_list.txt"): os.remove("file_list.txt")
