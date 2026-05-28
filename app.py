@@ -19,13 +19,16 @@ except:
 # --- HELPER DOWNLOAD FUNCTION ---
 def download_file(url, output_filename):
     """Downloads a binary asset with standard streaming chunks."""
-    response = requests.get(url, stream=True)
-    if response.status_code == 200:
-        with open(output_filename, 'wb') as f:
-            for chunk in response.iter_content(chunk_size=1024*1024):
-                if chunk:
-                    f.write(chunk)
-        return True
+    try:
+        response = requests.get(url, stream=True, timeout=10)
+        if response.status_code == 200:
+            with open(output_filename, 'wb') as f:
+                for chunk in response.iter_content(chunk_size=1024*1024):
+                    if chunk:
+                        f.write(chunk)
+            return True
+    except:
+        return False
     return False
 
 # --- BRIAN TEXT TO SPEECH GENERATOR ---
@@ -120,7 +123,6 @@ if st.button("🚀 Generate Multi-Scene Viral Video"):
     elif not video_tags:
         st.error("Please enter descriptive tags.")
     else:
-        # Split by punctuation but filter out empty parts
         sentences = [s.strip() for s in re.split(r'[.\n!?]+', script) if s.strip()]
         
         if not sentences:
@@ -144,7 +146,12 @@ if st.button("🚀 Generate Multi-Scene Viral Video"):
                     detected_mood = detect_mood(script)
                     music_url, track_name = fetch_background_music(detected_mood)
                     st.write(f"🎵 Mixing score track: **{track_name}**")
-                    download_file(music_url, m_input)
+                    
+                    # Try to download music, proceed regardless of outcome
+                    if download_file(music_url, m_input):
+                        st.write("✅ Music downloaded.")
+                    else:
+                        st.warning("⚠️ Could not download music, proceeding without audio track.")
                     
                     for i, sentence in enumerate(sentences):
                         st.write(f"🎞️ Compiling Scene {i+1}/{len(sentences)}: *\"{sentence}\"*")
@@ -158,8 +165,6 @@ if st.button("🚀 Generate Multi-Scene Viral Video"):
                         
                         scene_output = f"scene_{i}.mp4"
                         
-                        # FIX: explicitly map the voiceover [1:a] as the exclusive single audio stream source 
-                        # instead of letting FFmpeg look for audio inside the silent raw video clip.
                         ffmpeg_scene = [
                             'ffmpeg', '-y',
                             '-stream_loop', '-1', '-i', raw_video_file,
@@ -180,29 +185,34 @@ if st.button("🚀 Generate Multi-Scene Viral Video"):
                         for sf in scene_files:
                             f.write(f"file '{sf}'\n")
                             
-                    st.write("🧱 Merging scenes into visual sequence container...")
+                    st.write("🧱 Merging scenes...")
                     subprocess.run([
                         'ffmpeg', '-y',
                         '-f', 'concat', '-safe', '0', '-i', 'file_list.txt',
                         '-c', 'copy', 'concat_voiceover.mp4'
                     ], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
                     
-                    st.write("🎧 Fusing continuous background score layout...")
-                    ffmpeg_mix = [
-                        'ffmpeg', '-y',
-                        '-i', 'concat_voiceover.mp4',
-                        '-i', m_input,
-                        '-filter_complex', '[1:a]volume=0.15[bg];[0:a][bg]amix=inputs=2:duration=first[audio]',
-                        '-map', '0:v', '-map', '[audio]',
-                        '-c:v', 'copy', '-c:a', 'aac', v_output
-                    ]
-                    subprocess.run(ffmpeg_mix, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                    # FINAL MIX SAFETY CHECK
+                    if os.path.exists(m_input):
+                        st.write("🎧 Fusing background music...")
+                        ffmpeg_mix = [
+                            'ffmpeg', '-y',
+                            '-i', 'concat_voiceover.mp4',
+                            '-i', m_input,
+                            '-filter_complex', '[1:a]volume=0.15[bg];[0:a][bg]amix=inputs=2:duration=first[audio]',
+                            '-map', '0:v', '-map', '[audio]',
+                            '-c:v', 'copy', '-c:a', 'aac', v_output
+                        ]
+                        subprocess.run(ffmpeg_mix, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                    else:
+                        # Just rename if no music
+                        os.rename("concat_voiceover.mp4", v_output)
                     
-                    # Clean up workspace
+                    # Clean up
                     for sf in scene_files:
                         if os.path.exists(sf): os.remove(sf)
                     if os.path.exists("file_list.txt"): os.remove("file_list.txt")
-                    if os.path.exists("concat_voiceover.mp4"): os.remove("concat_voiceover.mp4")
+                    if os.path.exists("concat_voiceover.mp4") and os.path.exists(v_output): os.remove("concat_voiceover.mp4")
                     if os.path.exists(m_input): os.remove(m_input)
 
                     if os.path.exists(v_output):
@@ -210,4 +220,4 @@ if st.button("🚀 Generate Multi-Scene Viral Video"):
                         st.video(v_output)
                         st.balloons()
                     else:
-                        st.error("Compilation error occurred during stream rendering. Try simpler keywords or shorter sentences.")
+                        st.error("Compilation error.")
