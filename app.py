@@ -59,9 +59,7 @@ def detect_mood(script_text):
 
 # --- FETCH TRENDING MUSIC ---
 def fetch_background_music(mood):
-    # Imported locally here to force-bypass Streamlit namespace caching bugs
     import random
-    
     mood_tracks = {
         "motivational": [{"name": "Epic Cinematic Triumph", "url": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3"}],
         "suspense": [{"name": "Dark Shadows & Mystery", "url": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3"}],
@@ -75,7 +73,7 @@ def fetch_background_music(mood):
 
 # --- FETCH 1080P HD VIDEOS FROM PEXELS ---
 def fetch_pexels_video_pool(tags, api_key):
-    """Searches Pexels and filters exclusively for crisp 1080p vertical clips."""
+    """Searches Pexels and gathers high-quality vertical portrait clips."""
     headers = {"Authorization": api_key}
     url = f"https://api.pexels.com/videos/search?query={tags}&per_page=15&orientation=portrait"
     video_links = []
@@ -89,19 +87,15 @@ def fetch_pexels_video_pool(tags, api_key):
                     video_files = video.get("video_files", [])
                     selected_url = None
                     
-                    # Look for pristine 1080x1920 portrait files first
                     for f in video_files:
                         if f.get("width") == 1080 or f.get("height") == 1920:
                             selected_url = f["link"]
                             break
-                    
-                    # HD backup fallback
                     if not selected_url:
                         for f in video_files:
                             if f.get("quality") == "hd" or (f.get("height") and f.get("height") >= 720):
                                 selected_url = f["link"]
                                 break
-                                
                     if not selected_url and video_files:
                         selected_url = video_files[0]["link"]
                         
@@ -126,13 +120,11 @@ if st.button("🚀 Generate Multi-Scene Viral Video"):
     elif not video_tags:
         st.error("Please enter descriptive tags.")
     else:
-        # Split script cleanly by sentences and line endings
         sentences = [s.strip() for s in re.split(r'[.\n!?]+', script) if s.strip()]
         
         if not sentences:
             st.error("Could not parse script text sentences.")
         else:
-            # File staging tracking arrays
             scene_files = []
             m_input = "temp_music.mp3"
             v_output = "final_viral_video.mp4"
@@ -142,56 +134,49 @@ if st.button("🚀 Generate Multi-Scene Viral Video"):
                 if os.path.exists(f):
                     os.remove(f)
 
-            with st.spinner(f"🎬 Slicing script into {len(sentences)} distinct scenes..."):
-                
-                # Fetch visual video options array
+            with st.spinner(f"🎬 Processing {len(sentences)} scenes..."):
                 video_pool = fetch_pexels_video_pool(video_tags, PEXELS_API_KEY)
                 
                 if not video_pool:
                     st.error("Could not fetch elements from Pexels pool. Try simpler keywords!")
                 else:
-                    # Download continuous ambient soundtrack
                     detected_mood = detect_mood(script)
                     music_url, track_name = fetch_background_music(detected_mood)
                     st.write(f"🎵 Mixing score track: **{track_name}**")
                     download_file(music_url, m_input)
                     
-                    # Process and stitch individual multi-scene pieces
                     for i, sentence in enumerate(sentences):
                         st.write(f"🎞️ Compiling Scene {i+1}/{len(sentences)}: *\"{sentence}\"*")
                         
-                        # Generate Brian Audio Track for this phrase
                         tts_file = f"temp_tts_{i}.mp3"
                         generate_brian_voiceover(sentence, tts_file)
                         
-                        # Select unique matching 1080p template
                         raw_video_file = f"temp_raw_{i}.mp4"
                         chosen_video_url = video_pool[i % len(video_pool)]
                         download_file(chosen_video_url, raw_video_file)
                         
-                        # Compile isolated scene bound directly to specific phrase length
                         scene_output = f"scene_{i}.mp4"
+                        
+                        # Added precise 1080x1920 scaling, letterboxing, and standard frame/audio rate conversions
                         ffmpeg_scene = [
                             'ffmpeg', '-y',
                             '-stream_loop', '-1', '-i', raw_video_file,
                             '-i', tts_file,
-                            '-map', '0:v', '-map', '1:a',
+                            '-filter_complex', '[0:v]scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=30[v]',
+                            '-map', '[v]', '-map', '1:a',
                             '-c:v', 'libx264', '-pix_fmt', 'yuv420p',
-                            '-c:a', 'aac', '-shortest', scene_output
+                            '-c:a', 'aac', '-ar', '44100', '-shortest', scene_output
                         ]
                         subprocess.run(ffmpeg_scene, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
                         scene_files.append(scene_output)
                         
-                        # Clean scene ingredients immediately
                         if os.path.exists(raw_video_file): os.remove(raw_video_file)
                         if os.path.exists(tts_file): os.remove(tts_file)
                     
-                    # Generate video list index for FFmpeg
                     with open("file_list.txt", "w") as f:
                         for sf in scene_files:
                             f.write(f"file '{sf}'\n")
                             
-                    # Stitch individual scenes together 
                     st.write("🧱 Merging scenes into visual sequence container...")
                     subprocess.run([
                         'ffmpeg', '-y',
@@ -199,7 +184,6 @@ if st.button("🚀 Generate Multi-Scene Viral Video"):
                         '-c', 'copy', 'concat_voiceover.mp4'
                     ], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
                     
-                    # Overlay smooth ambient music down onto sequence layout
                     st.write("🎧 Fusing continuous background score layout...")
                     ffmpeg_mix = [
                         'ffmpeg', '-y',
@@ -211,7 +195,7 @@ if st.button("🚀 Generate Multi-Scene Viral Video"):
                     ]
                     subprocess.run(ffmpeg_mix, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
                     
-                    # Clean sequence cut files
+                    # Clean up
                     for sf in scene_files:
                         if os.path.exists(sf): os.remove(sf)
                     if os.path.exists("file_list.txt"): os.remove("file_list.txt")
@@ -223,4 +207,4 @@ if st.button("🚀 Generate Multi-Scene Viral Video"):
                         st.video(v_output)
                         st.balloons()
                     else:
-                        st.error("Compilation error occurred during stream rendering.")
+                        st.error("Compilation error occurred during stream rendering. Try simpler keywords or shorter sentences.")
