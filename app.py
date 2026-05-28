@@ -1,6 +1,5 @@
 import streamlit as st
 import requests
-import random
 import os
 import re
 import subprocess
@@ -60,6 +59,9 @@ def detect_mood(script_text):
 
 # --- FETCH TRENDING MUSIC ---
 def fetch_background_music(mood):
+    # Imported locally here to force-bypass Streamlit namespace caching bugs
+    import random
+    
     mood_tracks = {
         "motivational": [{"name": "Epic Cinematic Triumph", "url": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3"}],
         "suspense": [{"name": "Dark Shadows & Mystery", "url": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3"}],
@@ -221,4 +223,4 @@ if st.button("🚀 Generate Multi-Scene Viral Video"):
                         st.video(v_output)
                         st.balloons()
                     else:
-                        st.error("Compilation error occur during stream rendering.")
+                        st.error("Compilation error occurred during stream rendering.")
